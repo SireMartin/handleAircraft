@@ -14,8 +14,8 @@ parser.add_argument("--baudrate", type=int, help="master port baud rate", defaul
 parser.add_argument("--device", required=True, help="serial device")
 parser.add_argument("--rate", default=4, type=int, help="requested stream rate")
 parser.add_argument("--source-system", dest='SOURCE_SYSTEM', type=int, default=255, help='MAVLink source system for this GCS')
-parser.add_argument("--latitude", type=double, help="latitude (double) of package to be dropped", required=True)
-parser.add_argument("--longitude", type=double, help="longitude (double) of package to be dropped", required=True)
+parser.add_argument("--latitude", type=float, help="latitude (float) of package to be dropped", required=True)
+parser.add_argument("--longitude", type=float, help="longitude (float) of package to be dropped", required=True)
 parser.add_argument("--flyAlt", type=int, help="altitude (int) in meters to fly to", required=True)
 parser.add_argument("--dropAlt", type=int, help="altitude (int) in meters of package to be dropped", required=True)
 parser.add_argument("--pctForceGripperLeft", type=int, help="pct of the force that has to be used on gripper left when closed", default=100)
@@ -24,11 +24,6 @@ parser.add_argument("--pctForceGripperRight", type=int, help="pct of the force t
 args = parser.parse_args()
 
 from pymavlink import mavutil
-from enum import Enum
-
-class AircraftMode(Enum) :
-	Manual = 1
-	Automatic = 2
 
 GPIO.setmode(GPIO.BCM)
 GPIO.setwarnings(False)
@@ -67,7 +62,7 @@ def printMissions() :
 	print("")
 
 
-enumerateLeds()
+#enumerateLeds()
 
 # create a mavlink serial instance
 master = mavutil.mavlink_connection(args.device, baud=args.baudrate)
@@ -80,11 +75,12 @@ print("Sending all stream request for rate %u" % args.rate)
 for i in range(0, 3) :
 	master.mav.request_data_stream_send(master.target_system, master.target_component, mavutil.mavlink.MAV_DATA_STREAM_ALL, args.rate, 1)
 
-print("wait for gps fix ...")
-master.wait_gps_fix()
-currentLoc = master.location()
-print("first location ")
-print(currentLoc);
+#print("wait for gps fix ...")
+#master.wait_gps_fix()
+#currentLoc = master.location()
+#print("first location ")
+#print(currentLoc);
+currentLoc = mavutil.location(1, 2)
 
 printMissions()
 
@@ -104,12 +100,12 @@ msgMissionRequest = master.recv_match(type = "MISSION_REQUEST", blocking = True)
 print("mission request 1 from copter")
 print(msgMissionRequest)
 #MAV_CMD_NAV_TAKEOFF to 10 meters
-master.mav.mission_item_send(master.target_system, master.target_component, 1, 3, 22, 0, 1, 0, 0, 0, 0, 0, 0, 10)
+master.mav.mission_item_send(master.target_system, master.target_component, 1, 3, 22, 0, 1, 0, 0, 0, 0, 0, 0, args.flyAlt)
 msgMissionRequest = master.recv_match(type = "MISSION_REQUEST", blocking = True)
 print("mission request 2 from copter")
 print(msgMissionRequest)
 #MAV_CMD_NAV_LOITER_TIME for 15 sec at drop coordinates (args)
-master.mav.mission_item_send(master.target_system, master.target_component, 2, 3, 19, 0, 1, 15, 0, 0, 0, args.latitude, args.longitude, arg.altitude)
+master.mav.mission_item_send(master.target_system, master.target_component, 2, 3, 19, 0, 1, 15, 0, 0, 0, args.latitude, args.longitude, args.dropAlt)
 msgMissionRequest = master.recv_match(type = "MISSION_REQUEST", blocking = True)
 print("mission request 3 from copter")
 print(msgMissionRequest)
