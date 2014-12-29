@@ -30,33 +30,14 @@ def wait_heartbeat(m):
 # create a mavlink serial instance
 master = mavutil.mavlink_connection(args.device, baud=args.baudrate)
 
-# wait for the heartbeat msg to find the system ID
-master.wait_heartbeat()
-print("Heartbeat from APM (system %u component %u)" % (master.target_system, master.target_component))
-
-print("test heartbeat")
-msg = master.recv_match(blocking=True, type='HEARTBEAT')
-print(msg)
-
 print("Sending all stream request for rate %u" % args.rate)
-for i in range(0, 3):
-	master.mav.request_data_stream_send(master.target_system, master.target_component, mavutil.mavlink.MAV_DATA_STREAM_ALL, args.rate, 1)
-	time.sleep(0.1)
+master.mav.request_data_stream_send(master.target_system, master.target_component, mavutil.mavlink.MAV_DATA_STREAM_ALL, args.rate, 1)
 
 print("request mission list")
 master.mav.mission_request_list_send(master.target_system, master.target_component)
 
 print("wait for the mission_count msg")
-msg = master.recv_match(blocking=True, type='MISSION_COUNT')
-print(msg)
+while True:
+	msg = master.recv_match(type='HEARTBEAT')
+	print(msg)
 
-print("current (system %u component %u)" % (master.mav.srcSystem, master.mav.srcComponent))
-
-qtyMissionItems = msg.count
-print("Mission items count = %u" % qtyMissionItems)
-
-for i in range(0, qtyMissionItems):
-    master.mav.mission_request_send(master.target_system, master.target_component, i)
-    msg = master.recv_match(blocking=True, type='MISSION_ITEM')
-    '''print("mission item %u :" % i)'''
-    print(msg)

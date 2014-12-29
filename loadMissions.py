@@ -75,12 +75,12 @@ print("Sending all stream request for rate %u" % args.rate)
 for i in range(0, 3) :
 	master.mav.request_data_stream_send(master.target_system, master.target_component, mavutil.mavlink.MAV_DATA_STREAM_ALL, args.rate, 1)
 
-#print("wait for gps fix ...")
-#master.wait_gps_fix()
-#currentLoc = master.location()
-#print("first location ")
-#print(currentLoc);
-currentLoc = mavutil.location(1, 2)
+print("wait for gps fix ...")
+master.wait_gps_fix()
+currentLoc = master.location()
+print("first location ")
+print(currentLoc);
+#currentLoc = mavutil.location(lat = 50.891215, lng = 3.499862)
 
 printMissions()
 
