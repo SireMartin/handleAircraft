@@ -7,7 +7,53 @@ drop package at specified coordinates
 import sys, struct, time, os
 import RPi.GPIO as GPIO
 
+from pymavlink import mavutil
 from argparse import ArgumentParser
+
+def initLeds():
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setwarnings(False)
+        for gpionr in ledMap.itervalues():
+                GPIO.setup(gpionr, GPIO.OUT)
+                GPIO.output(gpionr, GPIO.LOW)
+
+#activates a led and disactivates the others
+def activateLed(argLedGpio):
+        for gpionr in ledMap.itervalues():
+                GPIO.output(gpionr, GPIO.LOW)
+        GPIO.output(argLedGpio, GPIO.HIGH)
+
+def disactivateLeds():
+        for gpionr in ledMap.itervalues():
+                GPIO.output(gpionr, GPIO.LOW)
+
+def enumerateLeds():
+        for gpionr in ledMap.itervalues():
+                activateLed(gpionr)
+                time.sleep(.3)
+	disactivateLeds()
+
+def printMissions():
+	writeToFile("", fileOut)
+        writeToFile("Missions", fileOut)
+        writeToFile("--------", fileOut)
+        #waypoint read protocol
+        master.waypoint_request_list_send()
+        msgMissionCount = master.recv_match(type = 'MISSION_COUNT', blocking = True)
+        writeToFile("mission count = {0}".format(msgMissionCount.count), fileOut)
+        for i in range ( 0, msgMissionCount.count ):
+                master.waypoint_request_send(i)
+                iterMission = master.recv_match(type = 'MISSION_ITEM', blocking = True)
+                writeToFile("mission {0} : ".format(i), fileOut)
+                writeToFile(iterMission, fileOut)
+        writeToFile("", fileOut)
+
+def writeToFile(argString, argFile):
+	if argString:
+	        argFile.write("{0} : {1}\n".format(time.strftime("%Y/%m/%d %H:%M:%S", time.localtime()), argString))
+	else:
+		argFile.write("\n")
+
 parser = ArgumentParser(description=__doc__)
 
 parser.add_argument("--baudrate", type=int, help="master port baud rate", default=115200)
@@ -23,120 +69,141 @@ parser.add_argument("--pctForceGripperRight", type=int, help="pct of the force t
 
 args = parser.parse_args()
 
-from pymavlink import mavutil
+#constants init
+ledMap = dict(blue = 7, red = 8, green = 24, yellow = 25)
+servoMinValue = 1000
+servoMaxValue = 2000
 
-GPIO.setmode(GPIO.BCM)
-GPIO.setwarnings(False)
-GPIO.setup(7, GPIO.OUT)		#blauw
-GPIO.setup(8, GPIO.OUT)		#rood 
-GPIO.setup(24, GPIO.OUT)	#groen
-GPIO.setup(25, GPIO.OUT)	#geel
+#generate output filename from scriptname and time
+fileOut = open("log_{0}_{1}_{2}.txt".format(str(os.path.splitext(__file__)[0]), time.strftime("%Y%m%d", time.localtime()), time.strftime("%H%M%S", time.localtime())), "w")
 
-def enumerateLeds():
-	#test leds
-	GPIO.output(7, GPIO.HIGH)
-	time.sleep(1)
-	GPIO.output(7, GPIO.LOW)
-	GPIO.output(8, GPIO.HIGH)
-	time.sleep(1)
-	GPIO.output(8, GPIO.LOW)
-	GPIO.output(24, GPIO.HIGH)
-	time.sleep(1)
-	GPIO.output(24, GPIO.LOW)
-	GPIO.output(25, GPIO.HIGH)
-	time.sleep(1)
-	GPIO.output(25, GPIO.LOW)
-	
-def printMissions() :
-	print("\nMissions")
-	print  ("--------")
-	#waypoint read protocol
-	master.waypoint_request_list_send()
-	msgMissionCount = master.recv_match(type = 'MISSION_COUNT', blocking = True)
-	print("mission count = {0}".format(msgMissionCount.count))
-	for i in range ( 0, msgMissionCount.count ):
-        	master.waypoint_request_send(i)
-		iterMission = master.recv_match(type = 'MISSION_ITEM', blocking = True)
-	        print("mission {0} : ".format(i))
-	        print iterMission
-	print("")
-
-
-#enumerateLeds()
+initLeds()
+enumerateLeds()
 
 # create a mavlink serial instance
 master = mavutil.mavlink_connection(args.device, baud=args.baudrate)
 
 # wait for the heartbeat msg to find the system ID
 master.wait_heartbeat()
-print("Heartbeat from APM (system %u component %u)" % (master.target_system, master.target_component))
+writeToFile(str("Heartbeat from APM (system {0} component {1})".format(master.target_system, master.target_component)), fileOut)
 
-print("Sending all stream request for rate %u" % args.rate)
+writeToFile("Sending all stream request for rate {0}".format(args.rate), fileOut)
 for i in range(0, 3) :
 	master.mav.request_data_stream_send(master.target_system, master.target_component, mavutil.mavlink.MAV_DATA_STREAM_ALL, args.rate, 1)
 
-print("wait for gps fix ...")
+writeToFile("wait for gps fix to acquire current location ...", fileOut)
 master.wait_gps_fix()
 currentLoc = master.location()
-print("first location ")
-print(currentLoc);
+writeToFile(currentLoc, fileOut)
 #currentLoc = mavutil.location(lat = 50.891215, lng = 3.499862)
 
 printMissions()
 
-print("clearing missions")
+writeToFile("clearing missions", fileOut)
 master.waypoint_clear_all_send()
 
 printMissions()
 
 #waypoint write protocol : send count; as much mission items demanded as count; mission ack receive
-print("populating mission items")
-master.mav.mission_count_send(master.target_system, master.target_component, 4)
+writeToFile("populating mission items", fileOut)
+master.mav.mission_count_send(master.target_system, master.target_component, 10)
 msgMissionRequest = master.recv_match(type = "MISSION_REQUEST", blocking = True)
-print("mission request 0 from copter")
-print(msgMissionRequest)
+writeToFile("mission request 0 from copter", fileOut)
+writeToFile(msgMissionRequest, fileOut)
 master.mav.mission_item_send(master.target_system, master.target_component, 0, 0, 16, 0, 1, 0, 0, 0, 0, currentLoc.lat, currentLoc.lng, 0)
 msgMissionRequest = master.recv_match(type = "MISSION_REQUEST", blocking = True)
-print("mission request 1 from copter")
-print(msgMissionRequest)
-#MAV_CMD_NAV_TAKEOFF to 10 meters
+writeToFile("mission request 1 from copter", fileOut)
+writeToFile(msgMissionRequest, fileOut)
+#MAV_CMD_NAV_TAKEOFF to fly altitude
 master.mav.mission_item_send(master.target_system, master.target_component, 1, 3, 22, 0, 1, 0, 0, 0, 0, 0, 0, args.flyAlt)
 msgMissionRequest = master.recv_match(type = "MISSION_REQUEST", blocking = True)
-print("mission request 2 from copter")
-print(msgMissionRequest)
-#MAV_CMD_NAV_LOITER_TIME for 15 sec at drop coordinates (args)
-master.mav.mission_item_send(master.target_system, master.target_component, 2, 3, 19, 0, 1, 15, 0, 0, 0, args.latitude, args.longitude, args.dropAlt)
+writeToFile("mission request 2 from copter", fileOut)
+writeToFile(msgMissionRequest, fileOut)
+#MAV_CMD_NAV_WAYPOINT
+master.mav.mission_item_send(master.target_system, master.target_component, 2, 3, 16, 0, 1, 0, 0, 0, 0, args.latitude, args.longitude, args.dropAlt)
 msgMissionRequest = master.recv_match(type = "MISSION_REQUEST", blocking = True)
-print("mission request 3 from copter")
-print(msgMissionRequest)
+writeToFile("mission request 3 from copter", fileOut)
+writeToFile(msgMissionRequest, fileOut)
+#MAV_CMD_NAV_LOITER_TIME for 10 sec at drop coordinates (args)
+master.mav.mission_item_send(master.target_system, master.target_component, 3, 3, 19, 0, 1, 10, 0, 0, 0, args.latitude, args.longitude, args.dropAlt)
+msgMissionRequest = master.recv_match(type = "MISSION_REQUEST", blocking = True)
+writeToFile("mission request 4 from copter", fileOut)
+writeToFile(msgMissionRequest, fileOut)
+#MAV_CMD_DO_SET_SERVO for releasing the package
+master.mav.mission_item_send(master.target_system, master.target_component, 4, 0, 183, 0, 1, 10, servoMinValue, 0, 0, 0, 0, 0)
+msgMissionRequest = master.recv_match(type = "MISSION_REQUEST", blocking = True)
+writeToFile("mission request 5 from copter", fileOut)
+writeToFile(msgMissionRequest, fileOut)
+#MAV_CMD_DO_SET_SERVO for releasing the package
+master.mav.mission_item_send(master.target_system, master.target_component, 5, 0, 183, 0, 1, 11, servoMinValue, 0, 0, 0, 0, 0)
+msgMissionRequest = master.recv_match(type = "MISSION_REQUEST", blocking = True)
+writeToFile("mission request 6 from copter", fileOut)
+writeToFile(msgMissionRequest, fileOut)
+#MAV_CMD_CONDITION_DELAY to give the package time to drop
+master.mav.mission_item_send(master.target_system, master.target_component, 6, 0, 112, 0, 1, 5, 0, 0, 0, 0, 0, 0)
+msgMissionRequest = master.recv_match(type = "MISSION_REQUEST", blocking = True)
+writeToFile("mission request 7 from copter", fileOut)
+writeToFile(msgMissionRequest, fileOut)
+#MAV_CMD_DO_SET_SERVO for releasing the package
+master.mav.mission_item_send(master.target_system, master.target_component, 7, 0, 183, 0, 1, 10, servoMaxValue, 0, 0, 0, 0, 0)
+msgMissionRequest = master.recv_match(type = "MISSION_REQUEST", blocking = True)
+writeToFile("mission request 8 from copter", fileOut)
+writeToFile(msgMissionRequest, fileOut)
+#MAV_CMD_DO_SET_SERVO for releasing the package
+master.mav.mission_item_send(master.target_system, master.target_component, 8, 0, 183, 0, 1, 11, servoMaxValue, 0, 0, 0, 0, 0)
+msgMissionRequest = master.recv_match(type = "MISSION_REQUEST", blocking = True)
+writeToFile("mission request 9 from copter", fileOut)
+writeToFile(msgMissionRequest, fileOut)
 #MAV_CMD_NAV_RETURN_TO_LAUNCH
-master.mav.mission_item_send(master.target_system, master.target_component, 3, 3, 20, 0, 1, 0, 0, 0, 0, 0, 0, 0)
+master.mav.mission_item_send(master.target_system, master.target_component, 9, 3, 20, 0, 1, 0, 0, 0, 0, 0, 0, 0)
 msgMissionAck = master.recv_match(type = "MISSION_ACK", blocking = True)
-print("mission ack copter")
-print(msgMissionAck)
+writeToFile("mission ack copter", fileOut)
+writeToFile(msgMissionAck, fileOut)
 
 printMissions()
 
+#keep track of mission status
+currentMission = -1
+
 while True:
-    msg = master.recv_match(blocking=True, type='MISSION_CURRENT')
-    print("Mission item reached with seq %u" % msg.seq)
-    if(msg.seq == 0):
-        print("seq 0 : steek gele led aan")
-        GPIO.output(25, GPIO.HIGH)
-    if(msg.seq == 1):
-        print("seq 1 : steek groene led aan")
-        GPIO.output(24, GPIO.HIGH)
-    if(msg.seq == 2):
-        print("seq 2 : steek rode led aan")
-        GPIO.output(8, GPIO.HIGH)
-    if(msg.seq == 3):
-        print("seq 3 : steek blauwe led aan") 
-        GPIO.output(7, GPIO.HIGH)
-    time.sleep(0.1)
-
-#currentTicksGripperLeft/Right
-#currentAircraftMode (enum above)
-
-
+	msg = master.recv_match(blocking=True, type='MISSION_CURRENT')
+	if(currentMission != msg.seq):
+		writeToFile("Mission item {} started".format(msg.seq), fileOut)
+		currentMission = msg.seq
+		if(msg.seq == 0):
+	                activateLed(ledMap["green"])
+        	elif(msg.seq == 1):
+                	activateLed(ledMap["yellow"])
+	        elif(msg.seq == 2):
+        	        activateLed(ledMap["blue"])
+	        elif(msg.seq == 3):
+        	        activateled(ledMap["red"])
+		elif(msg.seq == 4):
+                        activateLed(ledMap["green"])
+                elif(msg.seq == 5):
+                        activateLed(ledMap["yellow"])
+                elif(msg.seq == 6):
+                        activateLed(ledMap["blue"])
+                elif(msg.seq == 7):
+                        activateled(ledMap["red"])
+		elif(msg.seq == 8):
+                        activateLed(ledMap["green"])
+                elif(msg.seq == 9):
+                        activateLed(ledMap["yellow"])
+                elif(msg.seq == 10):
+                        activateLed(ledMap["blue"])
+                elif(msg.seq == 11):
+                        activateled(ledMap["red"])
+		elif(msg.seq == 12):
+                        activateLed(ledMap["green"])
+                elif(msg.seq == 13):
+                        activateLed(ledMap["yellow"])
+                elif(msg.seq == 14):
+                        activateLed(ledMap["blue"])
+                elif(msg.seq == 15):
+                        activateled(ledMap["red"])
+		else:
+			disactivateLeds()
 
 #todo : get the rtl height param to navigate to drop dest instead of having to specify it as a command arg
+
