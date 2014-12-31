@@ -50,9 +50,11 @@ def printMissions():
 
 def writeToFile(argString, argFile):
 	if argString:
+		print(argString)
 	        argFile.write("{0} : {1}\n".format(time.strftime("%Y/%m/%d %H:%M:%S", time.localtime()), argString))
 	else:
 		argFile.write("\n")
+		print("")
 
 parser = ArgumentParser(description=__doc__)
 
@@ -71,14 +73,16 @@ args = parser.parse_args()
 
 #constants init
 ledMap = dict(blue = 7, red = 8, green = 24, yellow = 25)
-servoMinValue = 1000
-servoMaxValue = 2000
+servoMinValue = 500
+servoMaxValue = 2300
 
 #generate output filename from scriptname and time
 fileOut = open("log_{0}_{1}_{2}.txt".format(str(os.path.splitext(__file__)[0]), time.strftime("%Y%m%d", time.localtime()), time.strftime("%H%M%S", time.localtime())), "w")
 
 initLeds()
 enumerateLeds()
+
+writeToFile("Program start", fileOut)
 
 # create a mavlink serial instance
 master = mavutil.mavlink_connection(args.device, baud=args.baudrate)
@@ -124,33 +128,33 @@ master.mav.mission_item_send(master.target_system, master.target_component, 2, 3
 msgMissionRequest = master.recv_match(type = "MISSION_REQUEST", blocking = True)
 writeToFile("mission request 3 from copter", fileOut)
 writeToFile(msgMissionRequest, fileOut)
-#MAV_CMD_NAV_LOITER_TIME for 10 sec at drop coordinates (args)
-master.mav.mission_item_send(master.target_system, master.target_component, 3, 3, 19, 0, 1, 10, 0, 0, 0, args.latitude, args.longitude, args.dropAlt)
+#MAV_CMD_DO_SET_SERVO for releasing the package
+master.mav.mission_item_send(master.target_system, master.target_component, 3, 0, 183, 0, 1, 10, servoMinValue, 0, 0, 0, 0, 0)
 msgMissionRequest = master.recv_match(type = "MISSION_REQUEST", blocking = True)
 writeToFile("mission request 4 from copter", fileOut)
 writeToFile(msgMissionRequest, fileOut)
 #MAV_CMD_DO_SET_SERVO for releasing the package
-master.mav.mission_item_send(master.target_system, master.target_component, 4, 0, 183, 0, 1, 10, servoMinValue, 0, 0, 0, 0, 0)
+master.mav.mission_item_send(master.target_system, master.target_component, 4, 0, 183, 0, 1, 9, servoMinValue, 0, 0, 0, 0, 0)
 msgMissionRequest = master.recv_match(type = "MISSION_REQUEST", blocking = True)
 writeToFile("mission request 5 from copter", fileOut)
 writeToFile(msgMissionRequest, fileOut)
-#MAV_CMD_DO_SET_SERVO for releasing the package
-master.mav.mission_item_send(master.target_system, master.target_component, 5, 0, 183, 0, 1, 11, servoMinValue, 0, 0, 0, 0, 0)
+#MAV_CMD_CONDITION_DELAY to give the package time to drop
+master.mav.mission_item_send(master.target_system, master.target_component, 5, 0, 112, 0, 1, 5, 0, 0, 0, 0, 0, 0)
 msgMissionRequest = master.recv_match(type = "MISSION_REQUEST", blocking = True)
 writeToFile("mission request 6 from copter", fileOut)
 writeToFile(msgMissionRequest, fileOut)
-#MAV_CMD_CONDITION_DELAY to give the package time to drop
-master.mav.mission_item_send(master.target_system, master.target_component, 6, 0, 112, 0, 1, 5, 0, 0, 0, 0, 0, 0)
+#MAV_CMD_DO_SET_SERVO for releasing the package
+master.mav.mission_item_send(master.target_system, master.target_component, 6, 0, 183, 0, 1, 10, servoMaxValue, 0, 0, 0, 0, 0)
 msgMissionRequest = master.recv_match(type = "MISSION_REQUEST", blocking = True)
 writeToFile("mission request 7 from copter", fileOut)
 writeToFile(msgMissionRequest, fileOut)
 #MAV_CMD_DO_SET_SERVO for releasing the package
-master.mav.mission_item_send(master.target_system, master.target_component, 7, 0, 183, 0, 1, 10, servoMaxValue, 0, 0, 0, 0, 0)
+master.mav.mission_item_send(master.target_system, master.target_component, 7, 0, 183, 0, 1, 9, servoMaxValue, 0, 0, 0, 0, 0)
 msgMissionRequest = master.recv_match(type = "MISSION_REQUEST", blocking = True)
 writeToFile("mission request 8 from copter", fileOut)
 writeToFile(msgMissionRequest, fileOut)
-#MAV_CMD_DO_SET_SERVO for releasing the package
-master.mav.mission_item_send(master.target_system, master.target_component, 8, 0, 183, 0, 1, 11, servoMaxValue, 0, 0, 0, 0, 0)
+#MAV_CMD_NAV_LOITER_TIME for 10 sec at drop coordinates (args)
+master.mav.mission_item_send(master.target_system, master.target_component, 8, 3, 19, 0, 1, 10, 0, 0, 0, args.latitude, args.longitude, args.dropAlt)
 msgMissionRequest = master.recv_match(type = "MISSION_REQUEST", blocking = True)
 writeToFile("mission request 9 from copter", fileOut)
 writeToFile(msgMissionRequest, fileOut)
@@ -177,7 +181,7 @@ while True:
 	        elif(msg.seq == 2):
         	        activateLed(ledMap["blue"])
 	        elif(msg.seq == 3):
-        	        activateled(ledMap["red"])
+        	        activateLed(ledMap["red"])
 		elif(msg.seq == 4):
                         activateLed(ledMap["green"])
                 elif(msg.seq == 5):
@@ -185,7 +189,7 @@ while True:
                 elif(msg.seq == 6):
                         activateLed(ledMap["blue"])
                 elif(msg.seq == 7):
-                        activateled(ledMap["red"])
+                        activateLed(ledMap["red"])
 		elif(msg.seq == 8):
                         activateLed(ledMap["green"])
                 elif(msg.seq == 9):
@@ -193,7 +197,7 @@ while True:
                 elif(msg.seq == 10):
                         activateLed(ledMap["blue"])
                 elif(msg.seq == 11):
-                        activateled(ledMap["red"])
+                        activateLed(ledMap["red"])
 		elif(msg.seq == 12):
                         activateLed(ledMap["green"])
                 elif(msg.seq == 13):
@@ -201,7 +205,7 @@ while True:
                 elif(msg.seq == 14):
                         activateLed(ledMap["blue"])
                 elif(msg.seq == 15):
-                        activateled(ledMap["red"])
+                        activateLed(ledMap["red"])
 		else:
 			disactivateLeds()
 
