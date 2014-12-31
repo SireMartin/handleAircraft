@@ -71,8 +71,8 @@ args = parser.parse_args()
 
 #constants init
 ledMap = dict(blue = 7, red = 8, green = 24, yellow = 25)
-servoMinValue = 1000
-servoMaxValue = 2000
+servoMinValue = 500
+servoMaxValue = 2300
 
 #generate output filename from scriptname and time
 fileOut = open("log_{0}_{1}_{2}.txt".format(str(os.path.splitext(__file__)[0]), time.strftime("%Y%m%d", time.localtime()), time.strftime("%H%M%S", time.localtime())), "w")
